@@ -19,46 +19,68 @@ public class PollService {
         return Poll.<Poll>listAll().stream().map(PollDto::from).collect(Collectors.toList());
     }
 
-    public PollResultDto getResult(String pollId, String sessionId) {
+    public PollResultDto getResult(String pollId, VoterIdentity voter) {
         Poll poll = Poll.findById(pollId);
         if (poll == null) throw new NotFoundException("Poll not found: " + pollId);
-        return buildResult(poll, sessionId);
+        return buildResult(poll, voter);
     }
 
     @Transactional
-    public PollResultDto vote(String pollId, VoteRequest req) {
+    public PollResultDto vote(String pollId, VoteRequest req, VoterIdentity voter) {
         Poll poll = Poll.findById(pollId);
         if (poll == null) throw new NotFoundException("Poll not found: " + pollId);
         validateCharacter(poll, req.characterId);
 
-        if (req.sessionId != null && !req.sessionId.isBlank()) {
-            long existing = Vote.count("pollId = ?1 AND sessionId = ?2", pollId, req.sessionId);
-            if (existing > 0) throw new ClientErrorException("Already voted on this poll", Response.Status.CONFLICT);
-        }
+        boolean alreadyVoted = voter.isAuthenticated()
+            ? Vote.count("pollId = ?1 AND userId = ?2", pollId, voter.userId()) > 0
+            : Vote.count("pollId = ?1 AND ipAddress = ?2 AND userId IS NULL", pollId, voter.ipAddress()) > 0;
+        if (alreadyVoted) throw new ClientErrorException("Already voted", 409);
 
         Vote v = Vote.builder()
             .pollId(pollId)
             .characterId(req.characterId)
             .sessionId(req.sessionId)
+            .userId(voter.userId())
+            .ipAddress(voter.ipAddress())
             .votedAt(LocalDateTime.now())
             .build();
         v.persist();
-        log.info("Vote cast: poll={} char={} session={}", pollId, req.characterId, req.sessionId);
-        return buildResult(poll, req.sessionId);
+
+        VoteHistory.builder()
+            .pollId(pollId).pollType("single")
+            .charId(req.characterId)
+            .userId(voter.userId()).ipAddress(voter.ipAddress())
+            .action("VOTE")
+            .build().persist();
+
+        log.info("Vote cast: poll={} char={} voter={}", pollId, req.characterId, voter.voterKey());
+        return buildResult(poll, voter);
     }
 
     @Transactional
-    public PollResultDto changeVote(String pollId, ChangeVoteRequest req) {
+    public PollResultDto changeVote(String pollId, ChangeVoteRequest req, VoterIdentity voter) {
         Poll poll = Poll.findById(pollId);
         if (poll == null) throw new NotFoundException("Poll not found: " + pollId);
         validateCharacter(poll, req.newCharacterId);
 
-        Vote existing = Vote.find("pollId = ?1 AND sessionId = ?2", pollId, req.sessionId)
-            .<Vote>firstResultOptional().orElseThrow(() -> new NotFoundException("No vote found to change"));
+        Vote existing = voter.isAuthenticated()
+            ? Vote.find("pollId = ?1 AND userId = ?2", pollId, voter.userId()).<Vote>firstResultOptional()
+                .orElseThrow(() -> new NotFoundException("No vote found"))
+            : Vote.find("pollId = ?1 AND ipAddress = ?2 AND userId IS NULL", pollId, voter.ipAddress()).<Vote>firstResultOptional()
+                .orElseThrow(() -> new NotFoundException("No vote found"));
+
         existing.characterId = req.newCharacterId;
         existing.votedAt = LocalDateTime.now();
-        log.info("Vote changed: poll={} newChar={} session={}", pollId, req.newCharacterId, req.sessionId);
-        return buildResult(poll, req.sessionId);
+
+        VoteHistory.builder()
+            .pollId(pollId).pollType("single")
+            .charId(req.newCharacterId)
+            .userId(voter.userId()).ipAddress(voter.ipAddress())
+            .action("CHANGE_VOTE")
+            .build().persist();
+
+        log.info("Vote changed: poll={} newChar={} voter={}", pollId, req.newCharacterId, voter.voterKey());
+        return buildResult(poll, voter);
     }
 
     private void validateCharacter(Poll poll, String charId) {
@@ -67,7 +89,7 @@ public class PollService {
         }
     }
 
-    public PollResultDto buildResult(Poll poll, String sessionId) {
+    public PollResultDto buildResult(Poll poll, VoterIdentity voter) {
         long c1 = Vote.count("pollId = ?1 AND characterId = ?2", poll.id, poll.fighter1.id);
         long c2 = Vote.count("pollId = ?1 AND characterId = ?2", poll.id, poll.fighter2.id);
         long total = c1 + c2;
@@ -75,9 +97,14 @@ public class PollService {
         double pct2 = total == 0 ? 50.0 : (c2 * 100.0 / total);
 
         String myVote = null;
-        if (sessionId != null && !sessionId.isBlank()) {
-            myVote = Vote.<Vote>find("pollId = ?1 AND sessionId = ?2", poll.id, sessionId)
-                .firstResultOptional().map(v -> v.characterId).orElse(null);
+        if (voter != null) {
+            if (voter.isAuthenticated()) {
+                myVote = Vote.<Vote>find("pollId = ?1 AND userId = ?2", poll.id, voter.userId())
+                    .firstResultOptional().map(v -> v.characterId).orElse(null);
+            } else if (voter.ipAddress() != null) {
+                myVote = Vote.<Vote>find("pollId = ?1 AND ipAddress = ?2 AND userId IS NULL", poll.id, voter.ipAddress())
+                    .firstResultOptional().map(v -> v.characterId).orElse(null);
+            }
         }
 
         return PollResultDto.builder()

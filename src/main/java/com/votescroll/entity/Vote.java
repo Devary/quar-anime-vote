@@ -6,8 +6,7 @@ import lombok.*;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "vote",
-    uniqueConstraints = @UniqueConstraint(columnNames = {"poll_id", "session_id"}))
+@Table(name = "vote")
 @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
 public class Vote extends PanacheEntity {
     @Column(name = "poll_id", nullable = false)
@@ -16,5 +15,9 @@ public class Vote extends PanacheEntity {
     public String characterId;
     @Column(name = "session_id")
     public String sessionId;
+    @Column(name = "user_id")
+    public Long userId;
+    @Column(name = "ip_address")
+    public String ipAddress;
     public LocalDateTime votedAt;
 }

@@ -1,6 +1,7 @@
 package com.votescroll.service;
 
 import com.votescroll.dto.HistoryItemDto;
+import com.votescroll.dto.VoterIdentity;
 import com.votescroll.entity.*;
 import jakarta.enterprise.context.ApplicationScoped;
 import lombok.extern.slf4j.Slf4j;
@@ -13,15 +14,17 @@ import java.util.stream.*;
 @Slf4j
 public class HistoryService {
 
-    public List<HistoryItemDto> getHistory(String sessionId, LocalDate date) {
+    public List<HistoryItemDto> getHistory(VoterIdentity voter, LocalDate date) {
         LocalDateTime from = date.atStartOfDay();
         LocalDateTime to   = date.plusDays(1).atStartOfDay();
 
         List<HistoryItemDto> result = new ArrayList<>();
 
         // Single polls
-        List<Vote> votes = Vote.list(
-            "sessionId = ?1 AND votedAt >= ?2 AND votedAt < ?3", sessionId, from, to);
+        List<Vote> votes = voter.isAuthenticated()
+            ? Vote.list("userId = ?1 AND votedAt >= ?2 AND votedAt < ?3", voter.userId(), from, to)
+            : Vote.list("ipAddress = ?1 AND userId IS NULL AND votedAt >= ?2 AND votedAt < ?3", voter.ipAddress(), from, to);
+
         for (Vote v : votes) {
             Poll poll = Poll.findById(v.pollId);
             if (poll == null) continue;
@@ -35,8 +38,10 @@ public class HistoryService {
         }
 
         // Multi polls
-        List<MultiPollVote> mVotes = MultiPollVote.list(
-            "sessionId = ?1 AND votedAt >= ?2 AND votedAt < ?3", sessionId, from, to);
+        List<MultiPollVote> mVotes = voter.isAuthenticated()
+            ? MultiPollVote.list("userId = ?1 AND votedAt >= ?2 AND votedAt < ?3", voter.userId(), from, to)
+            : MultiPollVote.list("ipAddress = ?1 AND userId IS NULL AND votedAt >= ?2 AND votedAt < ?3", voter.ipAddress(), from, to);
+
         for (MultiPollVote v : mVotes) {
             MultiPoll poll = MultiPoll.findById(v.pollId);
             if (poll == null) continue;

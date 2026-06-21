@@ -19,45 +19,66 @@ public class MultiPollService {
         return MultiPoll.<MultiPoll>listAll().stream().map(MultiPollDto::from).collect(Collectors.toList());
     }
 
-    public MultiPollResultDto getResult(String pollId, String sessionId) {
+    public MultiPollResultDto getResult(String pollId, VoterIdentity voter) {
         MultiPoll poll = MultiPoll.findById(pollId);
         if (poll == null) throw new NotFoundException("MultiPoll not found: " + pollId);
-        return buildResult(poll, sessionId);
+        return buildResult(poll, voter);
     }
 
     @Transactional
-    public MultiPollResultDto vote(String pollId, VoteRequest req) {
+    public MultiPollResultDto vote(String pollId, VoteRequest req, VoterIdentity voter) {
         MultiPoll poll = MultiPoll.findById(pollId);
         if (poll == null) throw new NotFoundException("MultiPoll not found: " + pollId);
         validateCandidate(poll, req.characterId);
 
-        if (req.sessionId != null && !req.sessionId.isBlank()) {
-            long existing = MultiPollVote.count("pollId = ?1 AND sessionId = ?2", pollId, req.sessionId);
-            if (existing > 0) throw new ClientErrorException("Already voted on this poll", Response.Status.CONFLICT);
-        }
+        boolean alreadyVoted = voter.isAuthenticated()
+            ? MultiPollVote.count("pollId = ?1 AND userId = ?2", pollId, voter.userId()) > 0
+            : MultiPollVote.count("pollId = ?1 AND ipAddress = ?2 AND userId IS NULL", pollId, voter.ipAddress()) > 0;
+        if (alreadyVoted) throw new ClientErrorException("Already voted", 409);
 
         MultiPollVote v = MultiPollVote.builder()
             .pollId(pollId).characterId(req.characterId)
-            .sessionId(req.sessionId).votedAt(LocalDateTime.now())
+            .sessionId(req.sessionId)
+            .userId(voter.userId()).ipAddress(voter.ipAddress())
+            .votedAt(LocalDateTime.now())
             .build();
         v.persist();
-        log.info("MultiPoll vote: poll={} char={} session={}", pollId, req.characterId, req.sessionId);
-        return buildResult(poll, req.sessionId);
+
+        VoteHistory.builder()
+            .pollId(pollId).pollType("multi")
+            .charId(req.characterId)
+            .userId(voter.userId()).ipAddress(voter.ipAddress())
+            .action("VOTE")
+            .build().persist();
+
+        log.info("MultiPoll vote: poll={} char={} voter={}", pollId, req.characterId, voter.voterKey());
+        return buildResult(poll, voter);
     }
 
     @Transactional
-    public MultiPollResultDto changeVote(String pollId, ChangeVoteRequest req) {
+    public MultiPollResultDto changeVote(String pollId, ChangeVoteRequest req, VoterIdentity voter) {
         MultiPoll poll = MultiPoll.findById(pollId);
         if (poll == null) throw new NotFoundException("MultiPoll not found: " + pollId);
         validateCandidate(poll, req.newCharacterId);
 
-        MultiPollVote existing = MultiPollVote
-            .find("pollId = ?1 AND sessionId = ?2", pollId, req.sessionId)
-            .<MultiPollVote>firstResultOptional()
-            .orElseThrow(() -> new NotFoundException("No vote found to change"));
+        MultiPollVote existing = voter.isAuthenticated()
+            ? MultiPollVote.find("pollId = ?1 AND userId = ?2", pollId, voter.userId()).<MultiPollVote>firstResultOptional()
+                .orElseThrow(() -> new NotFoundException("No vote found"))
+            : MultiPollVote.find("pollId = ?1 AND ipAddress = ?2 AND userId IS NULL", pollId, voter.ipAddress()).<MultiPollVote>firstResultOptional()
+                .orElseThrow(() -> new NotFoundException("No vote found"));
+
         existing.characterId = req.newCharacterId;
         existing.votedAt = LocalDateTime.now();
-        return buildResult(poll, req.sessionId);
+
+        VoteHistory.builder()
+            .pollId(pollId).pollType("multi")
+            .charId(req.newCharacterId)
+            .userId(voter.userId()).ipAddress(voter.ipAddress())
+            .action("CHANGE_VOTE")
+            .build().persist();
+
+        log.info("MultiPoll vote changed: poll={} newChar={} voter={}", pollId, req.newCharacterId, voter.voterKey());
+        return buildResult(poll, voter);
     }
 
     private void validateCandidate(MultiPoll poll, String charId) {
@@ -67,7 +88,7 @@ public class MultiPollService {
         if (!found) throw new BadRequestException("Character " + charId + " is not in this multi-poll");
     }
 
-    public MultiPollResultDto buildResult(MultiPoll poll, String sessionId) {
+    public MultiPollResultDto buildResult(MultiPoll poll, VoterIdentity voter) {
         List<GroupResultDto> groupResults = poll.groups.stream().map(group -> {
             long groupTotal = group.candidates.stream()
                 .mapToLong(c -> MultiPollVote.count("pollId = ?1 AND characterId = ?2", poll.id, c.id))
@@ -90,9 +111,14 @@ public class MultiPollService {
             .map(c -> c.charId).orElse(null);
 
         String myVote = null;
-        if (sessionId != null && !sessionId.isBlank()) {
-            myVote = MultiPollVote.<MultiPollVote>find("pollId = ?1 AND sessionId = ?2", poll.id, sessionId)
-                .firstResultOptional().map(v -> v.characterId).orElse(null);
+        if (voter != null) {
+            if (voter.isAuthenticated()) {
+                myVote = MultiPollVote.<MultiPollVote>find("pollId = ?1 AND userId = ?2", poll.id, voter.userId())
+                    .firstResultOptional().map(v -> v.characterId).orElse(null);
+            } else if (voter.ipAddress() != null) {
+                myVote = MultiPollVote.<MultiPollVote>find("pollId = ?1 AND ipAddress = ?2 AND userId IS NULL", poll.id, voter.ipAddress())
+                    .firstResultOptional().map(v -> v.characterId).orElse(null);
+            }
         }
 
         return MultiPollResultDto.builder()
