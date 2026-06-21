@@ -123,6 +123,10 @@ pipeline {
         INFRA_REPO_URL = 'https://github.com/Devary/infra.git'
         INFRA_REPO_BRANCH = 'main'
         VAULT_SECRET_PATH = "${DEFAULT_APP_NAME}"
+        JWT_ISSUER = 'http://192.168.178.41:8081/realms/dev'
+        KEYCLOAK_TOKEN_URL = 'http://192.168.178.41:8081/realms/dev/protocol/openid-connect/token'
+        KEYCLOAK_CLIENT_ID = 'anime-vote'
+        GATEWAY_AUTH_ENABLED = 'false'
     }
 
     stages {
@@ -372,9 +376,16 @@ container=${env.APP_NAME}
 port=${env.APP_PORT}
 replicas=${params.REPLICAS}
 vaultUrl=${env.K8S_VAULT_URL}
+vaultKvMount=${env.VAULT_KV_MOUNT}
+vaultSecretPath=${env.VAULT_SECRET_PATH}
+vaultBootstrap=true
 serviceAccount=${serviceAccount}
 ingressHost=${ingressHost}
 workspace=${infraWorkspace}
+jwtIssuer=${env.JWT_ISSUER}
+keycloakTokenUrl=${env.KEYCLOAK_TOKEN_URL}
+keycloakClientId=${env.KEYCLOAK_CLIENT_ID}
+gatewayAuthEnabled=${env.GATEWAY_AUTH_ENABLED}
 """.stripIndent().trim()
 
                     echo "Rundeck instance: ${env.RUNDECK_INSTANCE}"
