@@ -31,9 +31,9 @@ public class MultiPollResource {
     @Context HttpServerRequest vertxRequest;
 
     private VoterIdentity voterIdentity() {
-        Long userId = null;
-        if (security.getUserPrincipal() != null) {
-            try { userId = Long.parseLong(security.getUserPrincipal().getName()); } catch (NumberFormatException ignored) {}
+        String userId = null;
+        if (security.getUserPrincipal() != null && !security.getUserPrincipal().getName().equals("ANONYMOUS")) {
+            userId = security.getUserPrincipal().getName();
         }
         String ip = java.util.Optional.ofNullable(vertxRequest.getHeader("X-Forwarded-For"))
             .map(h -> h.split(",")[0].trim())

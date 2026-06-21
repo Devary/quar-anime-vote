@@ -12,7 +12,7 @@ import java.util.List;
 @Path("/admin/multi-polls")
 @Produces(MediaType.APPLICATION_JSON)
 @Consumes(MediaType.APPLICATION_JSON)
-@RolesAllowed("ADMIN")
+@RolesAllowed({"USER", "ADMIN", "user", "admin"})
 @Blocking
 public class AdminMultiPollResource {
 

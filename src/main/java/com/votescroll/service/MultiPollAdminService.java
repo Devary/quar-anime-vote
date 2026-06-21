@@ -19,6 +19,8 @@ public class MultiPollAdminService {
 
     @Transactional
     public MultiPollDto create(MultiPollCreateDto req) {
+        long dup = MultiPoll.count("anime = ?1 AND question = ?2", req.anime, req.question);
+        if (dup > 0) throw new ClientErrorException("A multi-poll with the same anime and question already exists", 409);
         MultiPoll mp = MultiPoll.builder()
             .id(UUID.randomUUID().toString())
             .anime(req.anime)

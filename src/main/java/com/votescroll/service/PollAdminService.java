@@ -28,6 +28,10 @@ public class PollAdminService {
         AnimeCharacter f2 = AnimeCharacter.findById(req.fighter2Id);
         if (f1 == null) throw new NotFoundException("Character not found: " + req.fighter1Id);
         if (f2 == null) throw new NotFoundException("Character not found: " + req.fighter2Id);
+        long dup = Poll.count(
+            "(fighter1.id = ?1 AND fighter2.id = ?2) OR (fighter1.id = ?2 AND fighter2.id = ?1)",
+            req.fighter1Id, req.fighter2Id);
+        if (dup > 0) throw new ClientErrorException("A poll with these two fighters already exists", 409);
         Poll p = Poll.builder()
             .id(UUID.randomUUID().toString())
             .anime(req.anime)

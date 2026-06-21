@@ -16,7 +16,7 @@ public class Vote extends PanacheEntity {
     @Column(name = "session_id")
     public String sessionId;
     @Column(name = "user_id")
-    public Long userId;
+    public String userId;
     @Column(name = "ip_address")
     public String ipAddress;
     public LocalDateTime votedAt;
