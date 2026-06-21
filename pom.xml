@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.devary</groupId>
+        <artifactId>parent</artifactId>
+        <version>1.0.11</version>
+    </parent>
+
+    <groupId>devary</groupId>
+    <artifactId>quar-anime-vote</artifactId>
+    <version>1.0.0-SNAPSHOT</version>
+    <packaging>jar</packaging>
+
+    <properties>
+        <jacoco.minimum.coverage>0.0</jacoco.minimum.coverage>
+    </properties>
+
+    <dependencies>
+        <!-- Blocking ORM + H2 -->
+        <dependency><groupId>io.quarkus</groupId><artifactId>quarkus-hibernate-orm-panache</artifactId></dependency>
+        <dependency><groupId>io.quarkus</groupId><artifactId>quarkus-jdbc-h2</artifactId></dependency>
+
+        <!--
+          The parent POM unconditionally pulls in reactive-* and gRPC.
+          Exclude them here so we stay with a pure blocking JDBC / H2 setup.
+        -->
+        <dependency>
+            <groupId>io.quarkus</groupId><artifactId>quarkus-grpc</artifactId>
+            <scope>provided</scope>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>io.quarkus</groupId><artifactId>quarkus-hibernate-reactive</artifactId>
+            <scope>provided</scope>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>io.quarkus</groupId><artifactId>quarkus-hibernate-reactive-panache</artifactId>
+            <scope>provided</scope>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>io.quarkus</groupId><artifactId>quarkus-reactive-pg-client</artifactId>
+            <scope>provided</scope>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>io.quarkus</groupId><artifactId>quarkus-jdbc-postgresql</artifactId>
+            <scope>provided</scope>
+            <optional>true</optional>
+        </dependency>
+    </dependencies>
+
+    <profiles>
+        <profile><id>local</id></profile>
+        <profile><id>prod</id></profile>
+        <profile><id>native</id></profile>
+    </profiles>
+</project>
