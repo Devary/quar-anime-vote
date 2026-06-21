@@ -1,4 +1,4 @@
-def DEFAULT_APP_NAME = 'quar-anime-vote'
+def DEFAULT_APP_NAME = 'anime-vote'
 
 def withAppVault(script, Closure body) {
     if (!script.env.VAULT_TOKEN?.trim()) {
