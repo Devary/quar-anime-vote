@@ -3,7 +3,7 @@ package com.votescroll.resource;
 import com.votescroll.dto.*;
 import com.votescroll.service.PollAdminService;
 import io.smallrye.common.annotation.Blocking;
-import jakarta.annotation.security.RolesAllowed;
+import io.quarkus.security.Authenticated;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.*;
@@ -12,7 +12,7 @@ import java.util.List;
 @Path("/admin/polls")
 @Produces(MediaType.APPLICATION_JSON)
 @Consumes(MediaType.APPLICATION_JSON)
-@RolesAllowed({"USER", "ADMIN", "user", "admin"})
+@Authenticated
 @Blocking
 public class AdminPollResource {
 
