@@ -5,14 +5,17 @@ import jakarta.persistence.*;
 import lombok.*;
 
 @Entity
-@Table(name = "character")
+@Table(name = "anime")
 @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
-public class AnimeCharacter extends PanacheEntityBase {
+public class Anime extends PanacheEntityBase {
+
     @Id
+    @Column(length = 36)
     public String id;
+
+    @Column(nullable = false, unique = true, length = 255)
     public String name;
-    public String title;
-    public String anime;
+
     @Column(length = 2048)
     public String imageUrl;
 }
