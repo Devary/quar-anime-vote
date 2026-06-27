@@ -1,14 +1,12 @@
 package com.votescroll.dto;
 
 import lombok.*;
+import java.util.List;
 
 @Data @NoArgsConstructor @AllArgsConstructor @Builder
 public class PollResultDto {
     public PollDto poll;
-    public long votes1;
-    public long votes2;
-    public double pct1;
-    public double pct2;
+    public List<FighterResultDto> fighterResults;
     public long total;
-    public String myVoteCharId;   // null if sessionId not provided or not voted
+    public String myVoteCharId;
 }

@@ -3,6 +3,8 @@ package com.votescroll.entity;
 import io.quarkus.hibernate.orm.panache.PanacheEntityBase;
 import jakarta.persistence.*;
 import lombok.*;
+import java.util.ArrayList;
+import java.util.List;
 
 @Entity
 @Table(name = "poll")
@@ -12,10 +14,33 @@ public class Poll extends PanacheEntityBase {
     public String id;
     public String anime;
     public String question;
+
+    // Legacy FK columns — kept non-null for existing data; always set to fighters[0/1]
     @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "fighter1_id")
     public AnimeCharacter fighter1;
+
     @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "fighter2_id")
     public AnimeCharacter fighter2;
+
+    // Ordered fighters list (2-10 per poll); populated for all new/updated polls
+    @ManyToMany(fetch = FetchType.EAGER)
+    @JoinTable(
+        name = "poll_fighters",
+        joinColumns = @JoinColumn(name = "poll_id"),
+        inverseJoinColumns = @JoinColumn(name = "character_id")
+    )
+    @OrderColumn(name = "fighter_order")
+    @Builder.Default
+    public List<AnimeCharacter> fighters = new ArrayList<>();
+
+    /** Returns fighters list when populated, otherwise falls back to fighter1/fighter2 for legacy rows. */
+    public List<AnimeCharacter> effectiveFighters() {
+        if (!fighters.isEmpty()) return fighters;
+        List<AnimeCharacter> list = new ArrayList<>();
+        if (fighter1 != null) list.add(fighter1);
+        if (fighter2 != null) list.add(fighter2);
+        return list;
+    }
 }

@@ -24,19 +24,33 @@ public class PollAdminService {
 
     @Transactional
     public PollDto create(PollCreateDto req) {
-        AnimeCharacter f1 = AnimeCharacter.findById(req.fighter1Id);
-        AnimeCharacter f2 = AnimeCharacter.findById(req.fighter2Id);
-        if (f1 == null) throw new NotFoundException("Character not found: " + req.fighter1Id);
-        if (f2 == null) throw new NotFoundException("Character not found: " + req.fighter2Id);
+        if (req.fighterIds == null || req.fighterIds.size() < 2 || req.fighterIds.size() > 10) {
+            throw new BadRequestException("Must select between 2 and 10 fighters");
+        }
+        long distinct = req.fighterIds.stream().distinct().count();
+        if (distinct < req.fighterIds.size()) {
+            throw new BadRequestException("Duplicate fighters are not allowed");
+        }
+
+        List<AnimeCharacter> fighters = new ArrayList<>();
+        for (String fId : req.fighterIds) {
+            AnimeCharacter f = AnimeCharacter.findById(fId);
+            if (f == null) throw new NotFoundException("Character not found: " + fId);
+            fighters.add(f);
+        }
+
         long dup = Poll.count(
             "(fighter1.id = ?1 AND fighter2.id = ?2) OR (fighter1.id = ?2 AND fighter2.id = ?1)",
-            req.fighter1Id, req.fighter2Id);
-        if (dup > 0) throw new ClientErrorException("A poll with these two fighters already exists", 409);
+            req.fighterIds.get(0), req.fighterIds.get(1));
+        if (dup > 0) throw new ClientErrorException("A poll with these fighters already exists", 409);
+
         Poll p = Poll.builder()
             .id(UUID.randomUUID().toString())
             .anime(req.anime)
             .question(req.question)
-            .fighter1(f1).fighter2(f2)
+            .fighters(fighters)
+            .fighter1(fighters.get(0))
+            .fighter2(fighters.get(1))
             .build();
         p.persist();
         log.info("Created poll: {}", p.id);
@@ -49,15 +63,24 @@ public class PollAdminService {
         if (p == null) throw new NotFoundException("Poll not found: " + id);
         if (req.anime != null) p.anime = req.anime;
         if (req.question != null) p.question = req.question;
-        if (req.fighter1Id != null) {
-            AnimeCharacter f1 = AnimeCharacter.findById(req.fighter1Id);
-            if (f1 == null) throw new NotFoundException("Character not found: " + req.fighter1Id);
-            p.fighter1 = f1;
-        }
-        if (req.fighter2Id != null) {
-            AnimeCharacter f2 = AnimeCharacter.findById(req.fighter2Id);
-            if (f2 == null) throw new NotFoundException("Character not found: " + req.fighter2Id);
-            p.fighter2 = f2;
+        if (req.fighterIds != null && !req.fighterIds.isEmpty()) {
+            if (req.fighterIds.size() < 2 || req.fighterIds.size() > 10) {
+                throw new BadRequestException("Must select between 2 and 10 fighters");
+            }
+            long distinct = req.fighterIds.stream().distinct().count();
+            if (distinct < req.fighterIds.size()) {
+                throw new BadRequestException("Duplicate fighters are not allowed");
+            }
+            List<AnimeCharacter> fighters = new ArrayList<>();
+            for (String fId : req.fighterIds) {
+                AnimeCharacter f = AnimeCharacter.findById(fId);
+                if (f == null) throw new NotFoundException("Character not found: " + fId);
+                fighters.add(f);
+            }
+            p.fighters.clear();
+            p.fighters.addAll(fighters);
+            p.fighter1 = fighters.get(0);
+            p.fighter2 = fighters.get(1);
         }
         return PollDto.from(p);
     }
