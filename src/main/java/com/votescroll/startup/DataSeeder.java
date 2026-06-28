@@ -1,6 +1,7 @@
 package com.votescroll.startup;
 
 import com.votescroll.entity.*;
+import com.votescroll.service.PasswordUtil;
 import io.quarkus.runtime.StartupEvent;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;
@@ -17,6 +18,8 @@ public class DataSeeder {
 
     @Transactional
     public void onStart(@Observes StartupEvent ev) {
+        seedRoles();
+        seedAdminUser();
         if (AnimeCharacter.count() == 0) {
             log.info("DataSeeder: seeding characters, polls and multi-polls...");
             seedCharacters();
@@ -28,6 +31,36 @@ public class DataSeeder {
             log.info("DataSeeder: data already exists — checking bracket tournament dates...");
             refreshBracketTournamentDates();
             log.info("DataSeeder: {} multi-polls active", MultiPoll.count());
+        }
+    }
+
+    private void seedRoles() {
+        record RoleDef(String id, String name, String description) {}
+        List<RoleDef> defs = List.of(
+            new RoleDef("ADMIN",     "Administrator",  "Full system access"),
+            new RoleDef("MODERATOR", "Moderator",      "Can manage content"),
+            new RoleDef("USER",      "User",           "Standard registered user"),
+            new RoleDef("VIP",       "VIP Member",     "VIP access"),
+            new RoleDef("PREMIUM",   "Premium Member", "Premium access")
+        );
+        for (RoleDef d : defs) {
+            if (AppRole.findById(d.id()) == null) {
+                AppRole.builder().id(d.id()).name(d.name()).description(d.description()).build().persist();
+            }
+        }
+        log.info("DataSeeder: roles ensured (count={})", AppRole.count());
+    }
+
+    private void seedAdminUser() {
+        if (!AppUser.existsByUsername("admin")) {
+            AppRole adminRole = AppRole.findById("ADMIN");
+            AppUser admin = new AppUser();
+            admin.username     = "admin";
+            admin.email        = "admin@anime-vote.local";
+            admin.passwordHash = PasswordUtil.hash("admin123");
+            admin.roles        = adminRole != null ? new HashSet<>(Set.of(adminRole)) : new HashSet<>();
+            admin.persist();
+            log.info("DataSeeder: default admin user created (username=admin, password=admin123)");
         }
     }
 

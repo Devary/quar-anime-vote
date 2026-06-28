@@ -1,7 +1,7 @@
 package com.votescroll.resource;
 
 import com.votescroll.dto.*;
-import com.votescroll.service.RedzoneAuthClient;
+import com.votescroll.service.UserService;
 import io.smallrye.common.annotation.Blocking;
 import jakarta.annotation.security.PermitAll;
 import jakarta.inject.Inject;
@@ -14,25 +14,25 @@ import jakarta.ws.rs.core.*;
 @Blocking
 public class AuthResource {
 
-    @Inject RedzoneAuthClient redzoneAuth;
+    @Inject UserService userService;
 
     @POST @Path("/login") @PermitAll
     public Response login(LoginRequest req) {
-        return Response.ok(redzoneAuth.login(req.username, req.password)).build();
+        return Response.ok(userService.login(req.username, req.password)).build();
     }
 
     @POST @Path("/register") @PermitAll
     public Response register(RegisterRequest req) {
-        return Response.status(201).entity(redzoneAuth.register(req)).build();
+        return Response.status(201).entity(userService.register(req)).build();
     }
 
     @POST @Path("/refresh") @PermitAll
     public Response refresh(RefreshRequest req) {
-        return Response.ok(redzoneAuth.refresh(req.refreshToken)).build();
+        return Response.ok(userService.refresh(req.refreshToken)).build();
     }
 
     @GET @Path("/username-availability/{username}") @PermitAll
     public UsernameAvailabilityResponse usernameAvailability(@PathParam("username") String username) {
-        return redzoneAuth.checkAvailability(username);
+        return userService.checkAvailability(username);
     }
 }

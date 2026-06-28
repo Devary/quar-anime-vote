@@ -4,10 +4,11 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.AllArgsConstructor;
 
+import java.util.List;
+
 @Data @NoArgsConstructor @AllArgsConstructor
-public class RegisterRequest {
-    public String username;
+public class AdminUserUpdateDto {
     public String email;
-    public String password;
-    public String confirmPassword;
+    public String profilePicture;
+    public List<String> roleIds; // role IDs to assign, e.g. ["USER", "VIP"]
 }

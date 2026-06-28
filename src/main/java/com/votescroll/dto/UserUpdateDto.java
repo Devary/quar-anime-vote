@@ -5,9 +5,7 @@ import lombok.NoArgsConstructor;
 import lombok.AllArgsConstructor;
 
 @Data @NoArgsConstructor @AllArgsConstructor
-public class RegisterRequest {
-    public String username;
+public class UserUpdateDto {
     public String email;
-    public String password;
-    public String confirmPassword;
+    public String profilePicture;
 }

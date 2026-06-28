@@ -8,6 +8,7 @@ import jakarta.annotation.security.PermitAll;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.*;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
+import org.eclipse.microprofile.jwt.JsonWebToken;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -23,12 +24,28 @@ public class UploadResource {
     @ConfigProperty(name = "upload.dir", defaultValue = "/opt/anime-vote/uploads")
     String uploadDir;
 
+    @jakarta.ws.rs.core.Context
+    jakarta.ws.rs.core.SecurityContext securityContext;
+
     @POST
-    @jakarta.ws.rs.Path("/admin/upload")
+    @jakarta.ws.rs.Path("/user/upload")
     @Authenticated
     @Consumes(MediaType.APPLICATION_JSON)
     @Produces(MediaType.APPLICATION_JSON)
+    public UploadResponse uploadUserPicture(UploadRequest req) throws IOException {
+        return saveFile(req);
+    }
+
+    @POST
+    @jakarta.ws.rs.Path("/admin/upload")
+    @jakarta.annotation.security.RolesAllowed("ADMIN")
+    @Consumes(MediaType.APPLICATION_JSON)
+    @Produces(MediaType.APPLICATION_JSON)
     public UploadResponse upload(UploadRequest req) throws IOException {
+        return saveFile(req);
+    }
+
+    private UploadResponse saveFile(UploadRequest req) throws IOException {
         if (req == null || req.data == null || req.data.isBlank()) {
             throw new WebApplicationException("No file data provided", Response.Status.BAD_REQUEST);
         }

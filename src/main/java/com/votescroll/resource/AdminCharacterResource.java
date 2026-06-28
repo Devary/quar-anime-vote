@@ -3,9 +3,9 @@ package com.votescroll.resource;
 import com.votescroll.dto.CharacterCreateDto;
 import com.votescroll.dto.CharacterDto;
 import com.votescroll.service.CharacterAdminService;
-import io.quarkus.security.Authenticated;
 import io.smallrye.common.annotation.Blocking;
 import jakarta.annotation.security.PermitAll;
+import jakarta.annotation.security.RolesAllowed;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.*;
@@ -18,31 +18,22 @@ import java.util.List;
 @Blocking
 public class AdminCharacterResource {
 
-    @Inject
-    CharacterAdminService service;
+    @Inject CharacterAdminService service;
 
-    @GET
-    @PermitAll
-    public List<CharacterDto> listAll() {
-        return service.listAll();
-    }
+    @GET @PermitAll
+    public List<CharacterDto> listAll() { return service.listAll(); }
 
-    @POST
-    @Authenticated
+    @POST @RolesAllowed("ADMIN")
     public Response create(CharacterCreateDto req) {
         return Response.status(201).entity(service.create(req)).build();
     }
 
-    @PUT
-    @Path("/{id}")
-    @Authenticated
+    @PUT @Path("/{id}") @RolesAllowed("ADMIN")
     public CharacterDto update(@PathParam("id") String id, CharacterCreateDto req) {
         return service.update(id, req);
     }
 
-    @DELETE
-    @Path("/{id}")
-    @Authenticated
+    @DELETE @Path("/{id}") @RolesAllowed("ADMIN")
     public Response delete(@PathParam("id") String id) {
         service.delete(id);
         return Response.noContent().build();
