@@ -48,8 +48,8 @@ public class RedzoneAuthClient {
 
     public LoginResponse register(RegisterRequest req) {
         Map<String, Object> body = new LinkedHashMap<>();
-        body.put("firstName", req.firstName != null ? req.firstName : req.username);
-        body.put("lastName", req.lastName != null && !req.lastName.isBlank() ? req.lastName : req.username);
+        body.put("firstName", req.username);
+        body.put("lastName", req.username);
         body.put("email", req.email);
         body.put("username", req.username);
         body.put("password", req.password);
