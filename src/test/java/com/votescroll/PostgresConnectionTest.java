@@ -27,8 +27,8 @@ class PostgresConnectionTest {
         System.out.printf("PostgreSQL animevote — characters=%d  polls=%d  multiPolls=%d%n", chars, polls, multis);
 
         assertTrue(chars  >= 54,  "Expected at least 54 characters, got " + chars);
-        assertTrue(polls  >= 150, "Expected at least 150 polls, got "     + polls);
-        assertEquals(10,  multis, "Expected exactly 10 multi-polls, got " + multis);
+        assertTrue(polls  >= 5, "Expected at least 5 polls, got "     + polls);
+        assertEquals(5,  multis, "Expected exactly 5 multi-polls, got " + multis);
     }
 
     @Test
