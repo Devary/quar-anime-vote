@@ -3,6 +3,7 @@ package com.votescroll.entity;
 import io.quarkus.hibernate.orm.panache.PanacheEntityBase;
 import jakarta.persistence.*;
 import lombok.*;
+import java.time.Instant;
 import java.util.List;
 
 @Entity
@@ -24,4 +25,8 @@ public class MultiPollGroup extends PanacheEntityBase {
     )
     @OrderColumn(name = "candidate_order")
     public List<AnimeCharacter> candidates;
+    @Column(name = "start_date")
+    public Instant startDate; // null = always open (legacy rows)
+    @Column(name = "end_date")
+    public Instant endDate;
 }

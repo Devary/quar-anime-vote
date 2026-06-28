@@ -55,6 +55,7 @@
             <groupId>io.quarkus</groupId><artifactId>quarkus-jdbc-postgresql</artifactId>
         </dependency>
         <dependency><groupId>io.quarkus</groupId><artifactId>quarkus-smallrye-jwt</artifactId></dependency>
+        <dependency><groupId>io.quarkus</groupId><artifactId>quarkus-hibernate-validator</artifactId></dependency>
     </dependencies>
 
     <profiles>

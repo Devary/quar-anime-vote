@@ -7,6 +7,7 @@ import jakarta.transaction.Transactional;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.Response;
 import lombok.extern.slf4j.Slf4j;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -29,7 +30,8 @@ public class MultiPollService {
     public MultiPollResultDto vote(String pollId, VoteRequest req, VoterIdentity voter) {
         MultiPoll poll = MultiPoll.findById(pollId);
         if (poll == null) throw new NotFoundException("MultiPoll not found: " + pollId);
-        validateCandidate(poll, req.characterId);
+        MultiPollGroup candidateGroup = resolveGroup(poll, req.characterId);
+        checkPeriod(candidateGroup);
 
         boolean alreadyVoted = voter.isAuthenticated()
             ? MultiPollVote.count("pollId = ?1 AND userId = ?2", pollId, voter.userId()) > 0
@@ -59,7 +61,8 @@ public class MultiPollService {
     public MultiPollResultDto changeVote(String pollId, ChangeVoteRequest req, VoterIdentity voter) {
         MultiPoll poll = MultiPoll.findById(pollId);
         if (poll == null) throw new NotFoundException("MultiPoll not found: " + pollId);
-        validateCandidate(poll, req.newCharacterId);
+        MultiPollGroup candidateGroup = resolveGroup(poll, req.newCharacterId);
+        checkPeriod(candidateGroup);
 
         MultiPollVote existing = voter.isAuthenticated()
             ? MultiPollVote.find("pollId = ?1 AND userId = ?2", pollId, voter.userId()).<MultiPollVote>firstResultOptional()
@@ -81,11 +84,20 @@ public class MultiPollService {
         return buildResult(poll, voter);
     }
 
-    private void validateCandidate(MultiPoll poll, String charId) {
-        boolean found = poll.groups.stream()
-            .flatMap(g -> g.candidates.stream())
-            .anyMatch(c -> c.id.equals(charId));
-        if (!found) throw new BadRequestException("Character " + charId + " is not in this multi-poll");
+    private MultiPollGroup resolveGroup(MultiPoll poll, String charId) {
+        return poll.groups.stream()
+            .filter(g -> g.candidates.stream().anyMatch(c -> c.id.equals(charId)))
+            .findFirst()
+            .orElseThrow(() -> new BadRequestException("Character " + charId + " is not in this multi-poll"));
+    }
+
+    private void checkPeriod(MultiPollGroup group) {
+        if (group.startDate == null) return; // legacy group — always open
+        Instant now = Instant.now();
+        if (now.isBefore(group.startDate))
+            throw new ClientErrorException("Voting for this group has not started yet", 403);
+        if (group.endDate != null && now.isAfter(group.endDate))
+            throw new ClientErrorException("Voting period for this group has ended", 403);
     }
 
     public MultiPollResultDto buildResult(MultiPoll poll, VoterIdentity voter) {
