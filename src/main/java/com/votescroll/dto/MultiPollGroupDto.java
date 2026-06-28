@@ -11,6 +11,9 @@ public class MultiPollGroupDto {
     public String id;
     public String label;
     public int groupOrder;
+    public int level;
+    public List<String> feederGroupIds;
+    public boolean resolved;
     public Instant startDate;
     public Instant endDate;
     public List<CharacterDto> candidates;
@@ -18,6 +21,9 @@ public class MultiPollGroupDto {
     public static MultiPollGroupDto from(MultiPollGroup g) {
         return MultiPollGroupDto.builder()
             .id(g.id).label(g.label).groupOrder(g.groupOrder)
+            .level(g.level)
+            .feederGroupIds(g.feederGroupIds != null ? g.feederGroupIds : List.of())
+            .resolved(g.isResolved())
             .startDate(g.startDate).endDate(g.endDate)
             .candidates(g.candidates.stream().map(CharacterDto::from).collect(Collectors.toList()))
             .build();

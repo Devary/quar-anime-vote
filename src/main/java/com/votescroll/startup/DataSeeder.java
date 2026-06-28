@@ -233,5 +233,97 @@ public class DataSeeder {
             }
         }
         log.info("Seeded {} multi-polls", MultiPoll.count());
+        seedBracketMultiPoll();
+        log.info("Seeded {} multi-polls (including bracket)", MultiPoll.count());
+    }
+
+    private void seedBracketMultiPoll() {
+        Map<String, AnimeCharacter> C = new HashMap<>();
+        AnimeCharacter.<AnimeCharacter>listAll().forEach(c -> C.put(c.id, c));
+
+        Instant now = Instant.now();
+
+        MultiPoll mp = MultiPoll.builder()
+            .id("mp-anime-tournament")
+            .anime("All Anime")
+            .question("Anime Grand Tournament — who is the ultimate champion?")
+            .groups(new ArrayList<>())
+            .build();
+        mp.persist();
+
+        // ── Level 0 : 4 quarter-final groups ──────────────────────────────────
+        // IDs are fixed so feeder references below can use them directly
+        String g0 = "mp-tournament-qf1"; // Blade Masters
+        String g1 = "mp-tournament-qf2"; // Speed Demons
+        String g2 = "mp-tournament-qf3"; // Dark Lords
+        String g3 = "mp-tournament-qf4"; // Power Giants
+
+        MultiPollGroup qf1 = MultiPollGroup.builder()
+            .id(g0).label("Blade Masters").groupOrder(0).level(0).poll(mp)
+            .candidates(chars(C, "zoro", "ichigo", "levi"))
+            .feederGroupIds(new ArrayList<>())
+            .startDate(now).endDate(now.plus(7, ChronoUnit.DAYS))
+            .build();
+
+        MultiPollGroup qf2 = MultiPollGroup.builder()
+            .id(g1).label("Speed Demons").groupOrder(1).level(0).poll(mp)
+            .candidates(chars(C, "minato", "killua", "goku"))
+            .feederGroupIds(new ArrayList<>())
+            .startDate(now).endDate(now.plus(7, ChronoUnit.DAYS))
+            .build();
+
+        MultiPollGroup qf3 = MultiPollGroup.builder()
+            .id(g2).label("Dark Lords").groupOrder(2).level(0).poll(mp)
+            .candidates(chars(C, "madara", "aizen", "muzan"))
+            .feederGroupIds(new ArrayList<>())
+            .startDate(now.plus(8, ChronoUnit.DAYS))
+            .endDate(now.plus(14, ChronoUnit.DAYS))
+            .build();
+
+        MultiPollGroup qf4 = MultiPollGroup.builder()
+            .id(g3).label("Power Giants").groupOrder(3).level(0).poll(mp)
+            .candidates(chars(C, "kaido", "meruem", "whitebeard"))
+            .feederGroupIds(new ArrayList<>())
+            .startDate(now.plus(8, ChronoUnit.DAYS))
+            .endDate(now.plus(14, ChronoUnit.DAYS))
+            .build();
+
+        // ── Level 1 : 2 semi-final groups ────────────────────────────────────
+        String sf1id = "mp-tournament-sf1";
+        String sf2id = "mp-tournament-sf2";
+
+        MultiPollGroup sf1 = MultiPollGroup.builder()
+            .id(sf1id).label("Semi-Final A").groupOrder(4).level(1).poll(mp)
+            .candidates(new ArrayList<>()) // populated when QF1 & QF2 end
+            .feederGroupIds(new ArrayList<>(List.of(g0, g1)))
+            .startDate(now.plus(15, ChronoUnit.DAYS))
+            .endDate(now.plus(21, ChronoUnit.DAYS))
+            .build();
+
+        MultiPollGroup sf2 = MultiPollGroup.builder()
+            .id(sf2id).label("Semi-Final B").groupOrder(5).level(1).poll(mp)
+            .candidates(new ArrayList<>()) // populated when QF3 & QF4 end
+            .feederGroupIds(new ArrayList<>(List.of(g2, g3)))
+            .startDate(now.plus(15, ChronoUnit.DAYS))
+            .endDate(now.plus(21, ChronoUnit.DAYS))
+            .build();
+
+        // ── Level 2 : Grand Final ─────────────────────────────────────────────
+        MultiPollGroup grand = MultiPollGroup.builder()
+            .id("mp-tournament-final").label("Grand Final").groupOrder(6).level(2).poll(mp)
+            .candidates(new ArrayList<>()) // populated when SF1 & SF2 end
+            .feederGroupIds(new ArrayList<>(List.of(sf1id, sf2id)))
+            .startDate(now.plus(22, ChronoUnit.DAYS))
+            .endDate(now.plus(30, ChronoUnit.DAYS))
+            .build();
+
+        for (MultiPollGroup g : List.of(qf1, qf2, qf3, qf4, sf1, sf2, grand)) {
+            g.persist();
+            mp.groups.add(g);
+        }
+    }
+
+    private List<AnimeCharacter> chars(Map<String, AnimeCharacter> C, String... ids) {
+        return Arrays.stream(ids).map(C::get).filter(Objects::nonNull).collect(Collectors.toList());
     }
 }

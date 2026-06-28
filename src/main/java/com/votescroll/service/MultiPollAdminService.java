@@ -31,30 +31,54 @@ public class MultiPollAdminService {
             .build();
         mp.persist();
 
-        // Single Instant.now() shared by all "startNow" groups in this transaction
         Instant transactionNow = Instant.now();
 
+        // First pass: create all groups with UUIDs (no feeder refs yet)
         List<MultiPollGroup> groups = new ArrayList<>();
+        List<String> groupIds = new ArrayList<>();
+
         for (int i = 0; i < req.groups.size(); i++) {
             MultiPollCreateDto.GroupCreateDto g = req.groups.get(i);
-            List<AnimeCharacter> chars = resolveCharacters(g.characterIds);
-            Instant resolvedStart = g.startNow ? transactionNow : g.startDate;
+            String gid = UUID.randomUUID().toString();
+            groupIds.add(gid);
+
+            boolean isBracket = g.level > 0;
+            List<AnimeCharacter> chars = (!isBracket && g.characterIds != null && !g.characterIds.isEmpty())
+                ? resolveCharacters(g.characterIds)
+                : new ArrayList<>();
+
+            Instant resolvedStart = (!isBracket && g.startNow) ? transactionNow : g.startDate;
 
             MultiPollGroup group = MultiPollGroup.builder()
-                .id(UUID.randomUUID().toString())
+                .id(gid)
                 .label(g.label)
                 .groupOrder(i)
+                .level(g.level)
                 .poll(mp)
                 .candidates(chars)
                 .startDate(resolvedStart)
                 .endDate(g.endDate)
+                .feederGroupIds(new ArrayList<>())
                 .build();
             group.persist();
             groups.add(group);
         }
-        mp.groups = groups;
 
-        log.info("Created multi-poll: {}", mp.id);
+        // Second pass: wire feeder references for bracket groups
+        for (int i = 0; i < req.groups.size(); i++) {
+            MultiPollCreateDto.GroupCreateDto g = req.groups.get(i);
+            if (g.level > 0 && g.feederIndices != null) {
+                MultiPollGroup group = groups.get(i);
+                List<String> feederIds = g.feederIndices.stream()
+                    .map(groupIds::get)
+                    .collect(Collectors.toList());
+                group.feederGroupIds.addAll(feederIds);
+            }
+        }
+
+        mp.groups = groups;
+        log.info("Created multi-poll: {} ({} groups, bracket={})", mp.id, groups.size(),
+            groups.stream().anyMatch(g -> g.level > 0));
         return MultiPollDto.from(mp);
     }
 
@@ -66,12 +90,11 @@ public class MultiPollAdminService {
         long voteCount = MultiPollVote.count("pollId = ?1", id);
         if (voteCount > 0) throw new ClientErrorException("Cannot update a poll that already has votes", 409);
 
-        // Candidates only — dates and labels are not changed
         int limit = Math.min(req.groups != null ? req.groups.size() : 0, mp.groups.size());
         for (int i = 0; i < limit; i++) {
             MultiPollCreateDto.GroupCreateDto gReq = req.groups.get(i);
             MultiPollGroup group = mp.groups.get(i);
-            if (gReq.characterIds != null && !gReq.characterIds.isEmpty()) {
+            if (group.level == 0 && gReq.characterIds != null && !gReq.characterIds.isEmpty()) {
                 List<AnimeCharacter> chars = resolveCharacters(
                     gReq.characterIds.stream().filter(cid -> cid != null && !cid.isBlank()).collect(Collectors.toList())
                 );

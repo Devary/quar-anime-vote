@@ -11,6 +11,8 @@ import java.time.LocalDateTime;
 public class MultiPollVote extends PanacheEntity {
     @Column(name = "poll_id", nullable = false)
     public String pollId;
+    @Column(name = "group_id")
+    public String groupId; // which group this vote belongs to (null on legacy rows)
     @Column(name = "character_id", nullable = false)
     public String characterId;
     @Column(name = "session_id")

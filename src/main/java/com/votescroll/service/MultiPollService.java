@@ -20,9 +20,11 @@ public class MultiPollService {
         return MultiPoll.<MultiPoll>listAll().stream().map(MultiPollDto::from).collect(Collectors.toList());
     }
 
+    @Transactional
     public MultiPollResultDto getResult(String pollId, VoterIdentity voter) {
         MultiPoll poll = MultiPoll.findById(pollId);
         if (poll == null) throw new NotFoundException("MultiPoll not found: " + pollId);
+        resolveWinners(poll);
         return buildResult(poll, voter);
     }
 
@@ -30,16 +32,20 @@ public class MultiPollService {
     public MultiPollResultDto vote(String pollId, VoteRequest req, VoterIdentity voter) {
         MultiPoll poll = MultiPoll.findById(pollId);
         if (poll == null) throw new NotFoundException("MultiPoll not found: " + pollId);
+        resolveWinners(poll);
         MultiPollGroup candidateGroup = resolveGroup(poll, req.characterId);
         checkPeriod(candidateGroup);
 
+        // Per-group duplicate check (users can vote once per group across all levels)
         boolean alreadyVoted = voter.isAuthenticated()
-            ? MultiPollVote.count("pollId = ?1 AND userId = ?2", pollId, voter.userId()) > 0
-            : MultiPollVote.count("pollId = ?1 AND ipAddress = ?2 AND userId IS NULL", pollId, voter.ipAddress()) > 0;
-        if (alreadyVoted) throw new ClientErrorException("Already voted", 409);
+            ? MultiPollVote.count("pollId = ?1 AND groupId = ?2 AND userId = ?3",
+                pollId, candidateGroup.id, voter.userId()) > 0
+            : MultiPollVote.count("pollId = ?1 AND groupId = ?2 AND ipAddress = ?3 AND userId IS NULL",
+                pollId, candidateGroup.id, voter.ipAddress()) > 0;
+        if (alreadyVoted) throw new ClientErrorException("Already voted in this group", 409);
 
         MultiPollVote v = MultiPollVote.builder()
-            .pollId(pollId).characterId(req.characterId)
+            .pollId(pollId).groupId(candidateGroup.id).characterId(req.characterId)
             .sessionId(req.sessionId)
             .userId(voter.userId()).ipAddress(voter.ipAddress())
             .votedAt(LocalDateTime.now())
@@ -53,7 +59,8 @@ public class MultiPollService {
             .action("VOTE")
             .build().persist();
 
-        log.info("MultiPoll vote: poll={} char={} voter={}", pollId, req.characterId, voter.voterKey());
+        log.info("MultiPoll vote: poll={} group={} char={} voter={}",
+            pollId, candidateGroup.id, req.characterId, voter.voterKey());
         return buildResult(poll, voter);
     }
 
@@ -61,14 +68,17 @@ public class MultiPollService {
     public MultiPollResultDto changeVote(String pollId, ChangeVoteRequest req, VoterIdentity voter) {
         MultiPoll poll = MultiPoll.findById(pollId);
         if (poll == null) throw new NotFoundException("MultiPoll not found: " + pollId);
+        resolveWinners(poll);
         MultiPollGroup candidateGroup = resolveGroup(poll, req.newCharacterId);
         checkPeriod(candidateGroup);
 
         MultiPollVote existing = voter.isAuthenticated()
-            ? MultiPollVote.find("pollId = ?1 AND userId = ?2", pollId, voter.userId()).<MultiPollVote>firstResultOptional()
-                .orElseThrow(() -> new NotFoundException("No vote found"))
-            : MultiPollVote.find("pollId = ?1 AND ipAddress = ?2 AND userId IS NULL", pollId, voter.ipAddress()).<MultiPollVote>firstResultOptional()
-                .orElseThrow(() -> new NotFoundException("No vote found"));
+            ? MultiPollVote.find("pollId = ?1 AND groupId = ?2 AND userId = ?3",
+                pollId, candidateGroup.id, voter.userId()).<MultiPollVote>firstResultOptional()
+                .orElseThrow(() -> new NotFoundException("No vote found in this group"))
+            : MultiPollVote.find("pollId = ?1 AND groupId = ?2 AND ipAddress = ?3 AND userId IS NULL",
+                pollId, candidateGroup.id, voter.ipAddress()).<MultiPollVote>firstResultOptional()
+                .orElseThrow(() -> new NotFoundException("No vote found in this group"));
 
         existing.characterId = req.newCharacterId;
         existing.votedAt = LocalDateTime.now();
@@ -80,9 +90,63 @@ public class MultiPollService {
             .action("CHANGE_VOTE")
             .build().persist();
 
-        log.info("MultiPoll vote changed: poll={} newChar={} voter={}", pollId, req.newCharacterId, voter.voterKey());
         return buildResult(poll, voter);
     }
+
+    // ── Winner resolution ────────────────────────────────────────────────────
+
+    /**
+     * For each unresolved bracket group (level > 0, no candidates yet), check if all
+     * feeder groups have ended. If so, populate its candidates with the feeder winners.
+     */
+    void resolveWinners(MultiPoll poll) {
+        Instant now = Instant.now();
+        boolean changed = false;
+
+        // Sort by level so lower levels are resolved first
+        List<MultiPollGroup> byLevel = poll.groups.stream()
+            .sorted(Comparator.comparingInt(g -> g.level))
+            .collect(Collectors.toList());
+
+        for (MultiPollGroup group : byLevel) {
+            if (group.level == 0 || !group.candidates.isEmpty()) continue;
+            if (group.feederGroupIds == null || group.feederGroupIds.isEmpty()) continue;
+
+            boolean allFeedersEnded = group.feederGroupIds.stream().allMatch(fid -> {
+                MultiPollGroup feeder = findGroupById(poll, fid);
+                return feeder != null
+                    && feeder.isResolved()
+                    && feeder.endDate != null
+                    && now.isAfter(feeder.endDate);
+            });
+            if (!allFeedersEnded) continue;
+
+            List<AnimeCharacter> winners = group.feederGroupIds.stream()
+                .map(fid -> getGroupWinner(poll.id, fid, poll.groups))
+                .filter(Objects::nonNull)
+                .collect(Collectors.toList());
+
+            if (winners.size() == group.feederGroupIds.size()) {
+                group.candidates.addAll(winners);
+                changed = true;
+                log.info("Resolved bracket group {}: candidates={}", group.id,
+                    winners.stream().map(c -> c.name).collect(Collectors.joining(", ")));
+            }
+        }
+    }
+
+    private AnimeCharacter getGroupWinner(String pollId, String groupId, List<MultiPollGroup> groups) {
+        MultiPollGroup group = findGroupById(groups, groupId);
+        if (group == null || group.candidates.isEmpty()) return null;
+
+        return group.candidates.stream()
+            .max(Comparator.comparingLong(c ->
+                MultiPollVote.count("pollId = ?1 AND groupId = ?2 AND characterId = ?3",
+                    pollId, groupId, c.id)))
+            .orElse(null);
+    }
+
+    // ── Helpers ──────────────────────────────────────────────────────────────
 
     private MultiPollGroup resolveGroup(MultiPoll poll, String charId) {
         return poll.groups.stream()
@@ -92,7 +156,7 @@ public class MultiPollService {
     }
 
     private void checkPeriod(MultiPollGroup group) {
-        if (group.startDate == null) return; // legacy group — always open
+        if (group.startDate == null) return;
         Instant now = Instant.now();
         if (now.isBefore(group.startDate))
             throw new ClientErrorException("Voting for this group has not started yet", 403);
@@ -100,36 +164,61 @@ public class MultiPollService {
             throw new ClientErrorException("Voting period for this group has ended", 403);
     }
 
+    private MultiPollGroup findGroupById(MultiPoll poll, String id) {
+        return findGroupById(poll.groups, id);
+    }
+
+    private MultiPollGroup findGroupById(List<MultiPollGroup> groups, String id) {
+        return groups.stream().filter(g -> g.id.equals(id)).findFirst().orElse(null);
+    }
+
+    // ── Result builder ────────────────────────────────────────────────────────
+
     public MultiPollResultDto buildResult(MultiPoll poll, VoterIdentity voter) {
         List<GroupResultDto> groupResults = poll.groups.stream().map(group -> {
             long groupTotal = group.candidates.stream()
-                .mapToLong(c -> MultiPollVote.count("pollId = ?1 AND characterId = ?2", poll.id, c.id))
+                .mapToLong(c -> MultiPollVote.count("pollId = ?1 AND groupId = ?2 AND characterId = ?3",
+                    poll.id, group.id, c.id))
                 .sum();
+
             List<CandidateResultDto> cands = group.candidates.stream().map(c -> {
-                long cnt = MultiPollVote.count("pollId = ?1 AND characterId = ?2", poll.id, c.id);
-                double pct = groupTotal == 0 ? (100.0 / group.candidates.size()) : (cnt * 100.0 / groupTotal);
+                long cnt = MultiPollVote.count("pollId = ?1 AND groupId = ?2 AND characterId = ?3",
+                    poll.id, group.id, c.id);
+                double pct = groupTotal == 0
+                    ? (100.0 / Math.max(group.candidates.size(), 1))
+                    : (cnt * 100.0 / groupTotal);
                 return CandidateResultDto.builder()
                     .charId(c.id).name(c.name).imageUrl(c.imageUrl)
                     .votes(cnt).pct(pct).build();
             }).collect(Collectors.toList());
+
             return GroupResultDto.builder()
-                .id(group.id).label(group.label).candidates(cands).groupTotal(groupTotal).build();
+                .id(group.id).label(group.label)
+                .level(group.level)
+                .feederGroupIds(group.feederGroupIds != null ? group.feederGroupIds : List.of())
+                .resolved(group.isResolved())
+                .candidates(cands).groupTotal(groupTotal)
+                .build();
         }).collect(Collectors.toList());
 
-        // Overall winner: candidate with most votes across all groups
+        // Overall winner: candidate with most votes across all resolved groups
         String winner = groupResults.stream()
             .flatMap(g -> g.candidates.stream())
             .max(Comparator.comparingLong(c -> c.votes))
             .map(c -> c.charId).orElse(null);
 
-        String myVote = null;
+        // Per-group vote map for the current user
+        Map<String, String> myVotesByGroup = new HashMap<>();
         if (voter != null) {
-            if (voter.isAuthenticated()) {
-                myVote = MultiPollVote.<MultiPollVote>find("pollId = ?1 AND userId = ?2", poll.id, voter.userId())
-                    .firstResultOptional().map(v -> v.characterId).orElse(null);
-            } else if (voter.ipAddress() != null) {
-                myVote = MultiPollVote.<MultiPollVote>find("pollId = ?1 AND ipAddress = ?2 AND userId IS NULL", poll.id, voter.ipAddress())
-                    .firstResultOptional().map(v -> v.characterId).orElse(null);
+            for (MultiPollGroup group : poll.groups) {
+                Optional<MultiPollVote> vote = voter.isAuthenticated()
+                    ? MultiPollVote.<MultiPollVote>find("pollId = ?1 AND groupId = ?2 AND userId = ?3",
+                        poll.id, group.id, voter.userId()).firstResultOptional()
+                    : (voter.ipAddress() != null
+                        ? MultiPollVote.<MultiPollVote>find("pollId = ?1 AND groupId = ?2 AND ipAddress = ?3 AND userId IS NULL",
+                            poll.id, group.id, voter.ipAddress()).firstResultOptional()
+                        : Optional.empty());
+                vote.ifPresent(v -> myVotesByGroup.put(group.id, v.characterId));
             }
         }
 
@@ -137,7 +226,7 @@ public class MultiPollService {
             .poll(MultiPollDto.from(poll))
             .groups(groupResults)
             .overallWinnerCharId(winner)
-            .myVoteCharId(myVote)
+            .myVotesByGroup(myVotesByGroup)
             .build();
     }
 }

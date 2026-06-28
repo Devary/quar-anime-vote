@@ -7,6 +7,9 @@ import java.util.List;
 public class GroupResultDto {
     public String id;
     public String label;
+    public int level;
+    public List<String> feederGroupIds;
+    public boolean resolved;
     public List<CandidateResultDto> candidates;
     public long groupTotal;
 }
