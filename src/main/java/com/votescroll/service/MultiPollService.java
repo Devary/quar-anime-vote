@@ -17,7 +17,8 @@ import java.util.stream.Collectors;
 public class MultiPollService {
 
     public List<MultiPollDto> getAll() {
-        return MultiPoll.<MultiPoll>listAll().stream().map(MultiPollDto::from).collect(Collectors.toList());
+        return MultiPoll.<MultiPoll>list("status = ?1 AND isPrivate = false", ContentStatus.APPROVED)
+            .stream().map(MultiPollDto::from).collect(Collectors.toList());
     }
 
     @Transactional

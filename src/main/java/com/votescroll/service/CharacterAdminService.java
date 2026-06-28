@@ -3,6 +3,7 @@ package com.votescroll.service;
 import com.votescroll.dto.CharacterCreateDto;
 import com.votescroll.dto.CharacterDto;
 import com.votescroll.entity.AnimeCharacter;
+import com.votescroll.entity.ContentStatus;
 import io.quarkus.panache.common.Sort;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.transaction.Transactional;
@@ -16,6 +17,11 @@ public class CharacterAdminService {
 
     public List<CharacterDto> listAll() {
         return AnimeCharacter.<AnimeCharacter>listAll(Sort.by("anime").and("name"))
+                .stream().map(CharacterDto::from).toList();
+    }
+
+    public List<CharacterDto> listApproved() {
+        return AnimeCharacter.<AnimeCharacter>list("status = ?1", ContentStatus.APPROVED)
                 .stream().map(CharacterDto::from).toList();
     }
 

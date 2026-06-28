@@ -3,6 +3,7 @@ package com.votescroll.entity;
 import io.quarkus.hibernate.orm.panache.PanacheEntityBase;
 import jakarta.persistence.*;
 import lombok.*;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -14,6 +15,26 @@ public class Poll extends PanacheEntityBase {
     public String id;
     public String anime;
     public String question;
+
+    /** null = admin/system-owned; otherwise the AppUser.id who created it */
+    public String ownerId;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    @Builder.Default
+    public ContentStatus status = ContentStatus.APPROVED;
+
+    @Column(name = "is_private", nullable = false)
+    @Builder.Default
+    public boolean isPrivate = false;
+
+    @Column(name = "delete_pending", nullable = false)
+    @Builder.Default
+    public boolean deletePending = false;
+
+    @Column(name = "created_at", nullable = false)
+    @Builder.Default
+    public Instant createdAt = Instant.now();
 
     // Legacy FK columns — kept non-null for existing data; always set to fighters[0/1]
     @ManyToOne(fetch = FetchType.EAGER)

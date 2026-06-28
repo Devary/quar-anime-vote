@@ -12,6 +12,8 @@ import jakarta.ws.rs.core.*;
 
 import java.util.List;
 
+@SuppressWarnings("unused")
+
 @Path("/admin/characters")
 @Produces(MediaType.APPLICATION_JSON)
 @Consumes(MediaType.APPLICATION_JSON)
@@ -19,9 +21,12 @@ import java.util.List;
 public class AdminCharacterResource {
 
     @Inject CharacterAdminService service;
+    @Context SecurityContext sec;
 
     @GET @PermitAll
-    public List<CharacterDto> listAll() { return service.listAll(); }
+    public List<CharacterDto> listAll() {
+        return sec.isUserInRole("ADMIN") ? service.listAll() : service.listApproved();
+    }
 
     @POST @RolesAllowed("ADMIN")
     public Response create(CharacterCreateDto req) {

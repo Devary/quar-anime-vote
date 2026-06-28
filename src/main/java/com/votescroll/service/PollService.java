@@ -15,7 +15,8 @@ import java.util.stream.Collectors;
 public class PollService {
 
     public List<PollDto> getAll() {
-        return Poll.<Poll>listAll().stream().map(PollDto::from).collect(Collectors.toList());
+        return Poll.<Poll>list("status = ?1 AND isPrivate = false", ContentStatus.APPROVED)
+            .stream().map(PollDto::from).collect(Collectors.toList());
     }
 
     public PollResultDto getResult(String pollId, VoterIdentity voter) {

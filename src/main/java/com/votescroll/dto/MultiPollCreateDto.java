@@ -12,6 +12,7 @@ import java.util.List;
 public class MultiPollCreateDto {
     public String anime;
     public String question;
+    public boolean isPrivate;
     @Valid
     public List<GroupCreateDto> groups;
 
