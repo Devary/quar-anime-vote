@@ -139,11 +139,22 @@ public class MultiPollService {
         MultiPollGroup group = findGroupById(groups, groupId);
         if (group == null || group.candidates.isEmpty()) return null;
 
+        // Count votes per candidate
+        Map<String, Long> counts = new java.util.HashMap<>();
+        for (AnimeCharacter c : group.candidates) {
+            counts.put(c.id, MultiPollVote.count(
+                "pollId = ?1 AND groupId = ?2 AND characterId = ?3", pollId, groupId, c.id));
+        }
+
+        long maxVotes = counts.values().stream().mapToLong(v -> v).max().orElse(0L);
+        // No votes or draw → cannot determine winner; parent group stays TBD
+        if (maxVotes == 0L) return null;
+        long tiedCount = counts.values().stream().filter(v -> v == maxVotes).count();
+        if (tiedCount > 1) return null;
+
         return group.candidates.stream()
-            .max(Comparator.comparingLong(c ->
-                MultiPollVote.count("pollId = ?1 AND groupId = ?2 AND characterId = ?3",
-                    pollId, groupId, c.id)))
-            .orElse(null);
+            .filter(c -> counts.get(c.id) == maxVotes)
+            .findFirst().orElse(null);
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────

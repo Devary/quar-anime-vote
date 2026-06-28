@@ -17,16 +17,65 @@ public class DataSeeder {
 
     @Transactional
     public void onStart(@Observes StartupEvent ev) {
-        if (AnimeCharacter.count() > 0) {
-            log.info("DataSeeder: data already exists, skipping");
+        if (AnimeCharacter.count() == 0) {
+            log.info("DataSeeder: seeding characters, polls and multi-polls...");
+            seedCharacters();
+            seedPolls();
+            seedMultiPolls();
+            log.info("DataSeeder: done. characters={}, polls={}, multiPolls={}",
+                AnimeCharacter.count(), Poll.count(), MultiPoll.count());
+        } else {
+            log.info("DataSeeder: data already exists — checking bracket tournament dates...");
+            refreshBracketTournamentDates();
+            log.info("DataSeeder: {} multi-polls active", MultiPoll.count());
+        }
+    }
+
+    /** Refresh the bracket tournament dates on every restart when QF1 has expired. */
+    private void refreshBracketTournamentDates() {
+        MultiPoll mp = MultiPoll.findById("mp-anime-tournament");
+        if (mp == null) {
+            seedBracketMultiPoll();
             return;
         }
-        log.info("DataSeeder: seeding characters, polls and multi-polls...");
-        seedCharacters();
-        seedPolls();
-        seedMultiPolls();
-        log.info("DataSeeder: done. characters={}, polls={}, multiPolls={}",
-            AnimeCharacter.count(), Poll.count(), MultiPoll.count());
+
+        MultiPollGroup qf1 = mp.groups.stream()
+            .filter(g -> "mp-tournament-qf1".equals(g.id))
+            .findFirst().orElse(null);
+
+        if (qf1 == null || qf1.endDate == null || !Instant.now().isAfter(qf1.endDate)) {
+            return; // dates still valid
+        }
+
+        log.info("DataSeeder: bracket QF dates expired — resetting with fresh dates");
+
+        // Clear all votes and history for the tournament
+        MultiPollVote.delete("pollId = ?1", "mp-anime-tournament");
+        VoteHistory.delete("pollId = ?1", "mp-anime-tournament");
+
+        Instant now = Instant.now();
+        for (MultiPollGroup g : mp.groups) {
+            switch (g.id) {
+                case "mp-tournament-qf1", "mp-tournament-qf2" -> {
+                    g.startDate = now;
+                    g.endDate   = now.plus(7,  ChronoUnit.DAYS);
+                }
+                case "mp-tournament-qf3", "mp-tournament-qf4" -> {
+                    g.startDate = now.plus(8,  ChronoUnit.DAYS);
+                    g.endDate   = now.plus(14, ChronoUnit.DAYS);
+                }
+                case "mp-tournament-sf1", "mp-tournament-sf2" -> {
+                    g.startDate = now.plus(15, ChronoUnit.DAYS);
+                    g.endDate   = now.plus(21, ChronoUnit.DAYS);
+                    g.candidates.clear();
+                }
+                case "mp-tournament-final" -> {
+                    g.startDate = now.plus(22, ChronoUnit.DAYS);
+                    g.endDate   = now.plus(30, ChronoUnit.DAYS);
+                    g.candidates.clear();
+                }
+            }
+        }
     }
 
     private static String w(String wiki, String path) {
