@@ -28,7 +28,7 @@ class PostgresConnectionTest {
 
         assertTrue(chars  >= 54,  "Expected at least 54 characters, got " + chars);
         assertTrue(polls  >= 5, "Expected at least 5 polls, got "     + polls);
-        assertEquals(5,  multis, "Expected exactly 5 multi-polls, got " + multis);
+        assertEquals(6,  multis, "Expected exactly 6 multi-polls, got " + multis);
     }
 
     @Test
