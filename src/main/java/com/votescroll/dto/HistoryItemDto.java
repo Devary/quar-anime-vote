@@ -11,5 +11,6 @@ public class HistoryItemDto {
     public String question;
     public String myVoteCharId;
     public String myVoteCharName;
+    public String myVoteCharImageUrl;
     public LocalDateTime votedAt;
 }

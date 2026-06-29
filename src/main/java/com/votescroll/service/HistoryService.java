@@ -28,31 +28,44 @@ public class HistoryService {
         for (Vote v : votes) {
             Poll poll = Poll.findById(v.pollId);
             if (poll == null) continue;
-            String name = poll.fighter1.id.equals(v.characterId)
-                ? poll.fighter1.name : poll.fighter2.name;
+            AnimeCharacter votedChar = poll.effectiveFighters().stream()
+                .filter(c -> c.id.equals(v.characterId)).findFirst().orElse(null);
+            String name     = votedChar != null ? votedChar.name     : v.characterId;
+            String imageUrl = votedChar != null ? votedChar.imageUrl : null;
             result.add(HistoryItemDto.builder()
                 .pollId(v.pollId).pollType("single")
                 .anime(poll.anime).question(poll.question)
                 .myVoteCharId(v.characterId).myVoteCharName(name)
+                .myVoteCharImageUrl(imageUrl)
                 .votedAt(v.votedAt).build());
         }
 
-        // Multi polls
+        // Multi polls — deduplicated by pollId (show the earliest vote per poll)
         List<MultiPollVote> mVotes = voter.isAuthenticated()
             ? MultiPollVote.list("userId = ?1 AND votedAt >= ?2 AND votedAt < ?3", voter.userId(), from, to)
             : MultiPollVote.list("ipAddress = ?1 AND userId IS NULL AND votedAt >= ?2 AND votedAt < ?3", voter.ipAddress(), from, to);
 
+        // Keep only the earliest vote per pollId
+        Map<String, MultiPollVote> dedupByPoll = new LinkedHashMap<>();
         for (MultiPollVote v : mVotes) {
+            dedupByPoll.merge(v.pollId, v, (existing, newer) ->
+                existing.votedAt.isBefore(newer.votedAt) ? existing : newer);
+        }
+
+        for (MultiPollVote v : dedupByPoll.values()) {
             MultiPoll poll = MultiPoll.findById(v.pollId);
             if (poll == null) continue;
-            String name = poll.groups.stream()
+            AnimeCharacter votedChar = poll.groups.stream()
                 .flatMap(g -> g.candidates.stream())
                 .filter(c -> c.id.equals(v.characterId))
-                .findFirst().map(c -> c.name).orElse(v.characterId);
+                .findFirst().orElse(null);
+            String name     = votedChar != null ? votedChar.name     : v.characterId;
+            String imageUrl = votedChar != null ? votedChar.imageUrl : null;
             result.add(HistoryItemDto.builder()
                 .pollId(v.pollId).pollType("multi")
                 .anime(poll.anime).question(poll.question)
                 .myVoteCharId(v.characterId).myVoteCharName(name)
+                .myVoteCharImageUrl(imageUrl)
                 .votedAt(v.votedAt).build());
         }
 
